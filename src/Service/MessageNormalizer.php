@@ -1,6 +1,5 @@
 <?php
 declare(strict_types=1);
-
 namespace App\Service;
 
 class MessageNormalizer
@@ -11,7 +10,6 @@ class MessageNormalizer
     {
         $this->stopWords = file($stopWordsPath, FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES);
     }
-
 
     public function normalize(string $text): array
     {

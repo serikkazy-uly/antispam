@@ -34,4 +34,4 @@ services:
     App\Service\SpamChecker:
         arguments:
             $blockListPath: '%blocklist_path%'
-            $redis: '@snc_redis.default'
+#            $redis: '@snc_redis.default'

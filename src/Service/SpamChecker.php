@@ -2,20 +2,23 @@
 declare(strict_types=1);
 namespace App\Service;
 
+use Symfony\Contracts\Cache\CacheInterface;
+use Symfony\Contracts\Cache\ItemInterface;
+
 class SpamChecker
 {
     private $blocklist;
-    private $redis;
+    private CacheInterface $cache;
 
-    public function __construct(string $blockListPath, \Redis $redis)
+    public function __construct(string $blockListPath, CacheInterface $cache)
     {
         $this->blocklist = file($blockListPath, FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES);
-        $this->redis = $redis;
+        $this->cache = $cache;
     }
 
     public function isSpam(array $tokens, string $text, bool $checkRate): array
     {
-        if ($this->containsBlockList($tokens, $text)) {
+        if ($this->containsBlockList($tokens)) {
             return ['spam' => true, 'reason' => 'block_list'];
         }
         if ($this->containsMixedWords($tokens)) {
@@ -57,9 +60,13 @@ class SpamChecker
 
     private function isDuplicate(array $tokens): bool
     {
-        $normalized       = implode(' ', $tokens);
-        $redisKey         = 'spam_checker:previous_messages';
-        $previousMessages = $this->redis->lrange($redisKey, 0, -1);
+        $normalized = implode(' ', $tokens);
+        $key = 'spam_checker_previous_messages';
+
+        $previousMessages = $this->cache->get($key, function(ItemInterface $item) {
+            $item->expiresAfter(3600);
+            return [];
+        });
 
         foreach ($previousMessages as $message) {
             similar_text($normalized, $message, $percent);
@@ -68,30 +75,51 @@ class SpamChecker
             }
         }
 
-        $this->redis->lpush($redisKey, $normalized);
-        $this->redis->ltrim($redisKey, 0, 4);
+        $previousMessages[] = $normalized;
+        $this->cache->save($this->cache->getItem($key)->set($previousMessages));
 
         return false;
-
     }
 
-    private function checkRate(string $text): bool
+    private function checkRate(): bool
     {
-        $redisKey    = 'spam_checker:message_timestamps';
+        $key = 'spam_checker_message_timestamps';
         $currentTime = microtime(true);
-        $this->redis->lpush($redisKey, $currentTime);
 
-        $timestamps = $this->redis->lrange($redisKey, 0, 1);
+        $timestamps = $this->cache->get($key, function(ItemInterface $item) use ($currentTime) {
+            $item->expiresAfter(3600);
+            return [$currentTime];
+        });
+
+        $timestamps[] = $currentTime;
 
         if (count($timestamps) < 2) {
+            $this->cache->save($this->cache->getItem($key)->set($timestamps));
+
             return false;
         }
 
-        $timeDifference = $timestamps[0] - $timestamps[1];
+        $timeDifference = $timestamps[count($timestamps) - 1] - $timestamps[count($timestamps) - 2];
 
-        $this->redis->ltrim($redisKey, 0, 9);
+        if (count($timestamps) > 10) {
+            array_shift($timestamps);
+        }
+        $this->cache->save($this->cache->getItem($key)->set($timestamps));
 
         return $timeDifference < 2;
     }
+
+    public function setCache(CacheInterface $cache): void
+    {
+        $this->cache = $cache;
+    }
+
+    public function getCacheContent(string $key): array
+    {
+        return $this->cache->get($key, function() {
+            return [];
+        });
+    }
+
 
 }
