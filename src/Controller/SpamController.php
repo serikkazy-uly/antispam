@@ -29,11 +29,11 @@ class SpamController extends AbstractController
         $checkRate = $request->request->get('check_rate', 0);
 
         if (empty($text)) {
-            return new JsonResponse(json_encode(
+            return new JsonResponse(
                 [
                     'status' => 'error',
                     'message' => 'field text required'
-                ]), 400);
+                ], 400);
         }
 
         $tokens = $this->normalizer->normalize($text);
