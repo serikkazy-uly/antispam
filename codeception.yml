@@ -7,7 +7,7 @@ suites:
             enabled:
                 - REST:
                     # адрес настоящего сервиса, заменить на свой
-                    url: http://localhost:8080/
+                    url: http://web:8080/
                     depends: PhpBrowser
 
 paths:

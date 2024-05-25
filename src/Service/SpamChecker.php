@@ -16,30 +16,33 @@ class SpamChecker
         $this->cache = $cache;
     }
 
-    public function isSpam(array $tokens, string $text, bool $checkRate): array
+    public function isSpam(array $tokens, string $normalized, bool $checkRate): array
     {
         if ($this->containsBlockList($tokens)) {
-            return ['spam' => true, 'reason' => 'block_list'];
+            return ['status' => 'ok', 'spam' => true, 'reason' => 'block_list'];
         }
         if ($this->containsMixedWords($tokens)) {
-            return ['spam' => true, 'reason' => 'mixed_words'];
+            return ['status' => 'ok', 'spam' => true, 'reason' => 'mixed_words'];
         }
 
-        if ($this->isDuplicate($tokens)) {
-            return ['spam' => true, 'reason' => 'duplicate'];
+        if ($this->isDuplicate($normalized)) {
+            return ['status' => 'ok', 'spam' => true, 'reason' => 'duplicate'];
         }
 
-        if ($checkRate && $this->checkRate($text)) {
-            return ['spam' => true, 'reason' => 'check_rate'];
+        if ($checkRate && $this->checkRate()) {
+            return ['status' => 'ok', 'spam' => true, 'reason' => 'check_rate'];
         }
 
-        return ['spam' => false];
+        return ['status' => 'ok', 'spam' => false];
     }
 
     private function containsBlockList(array $tokens): bool
     {
+//        dump($tokens);
+//        dump($this->blocklist);
         foreach ($tokens as $token) {
             if (in_array($token, $this->blocklist, true) || filter_var($token, FILTER_VALIDATE_EMAIL)) {
+//                var_dump($this->blocklist);
                 return true;
             }
         }
@@ -49,22 +52,54 @@ class SpamChecker
 
     private function containsMixedWords(array $tokens): bool
     {
+//        dump($tokens);
         foreach ($tokens as $token) {
-            if (preg_match('/[а-яА-Я]/u', $token) && preg_match('/[a-zA-Z]/', $token)) {
+            $hasCyrillic = preg_match('/[а-яА-Я]/u', $token);
+            $hasLatin = preg_match('/[a-zA-Z]/', $token);
+//            dump(['cyrillic' => $hasCyrillic, 'latin' => $hasLatin]);
+
+            if ($hasCyrillic && $hasLatin) {
                 return true;
             }
         }
-
         return false;
     }
 
-    private function isDuplicate(array $tokens): bool
-    {
-        $normalized = implode(' ', $tokens);
-        $key = 'spam_checker_previous_messages';
+//    private function isDuplicate(array $tokens): bool
+//    {
+////        dump($tokens);
+//        $normalized = implode(' ', $tokens);
+//        $key = 'spam_checker_previous_messages';
+////        dump($key);
+//        $previousMessages = $this->cache->get($key, function(ItemInterface $item) {
+//            $item->expiresAfter(2);
+////            dump($item);
+//            return [];
+//        });
+//
+//        foreach ($previousMessages as $message) {
+//            similar_text($normalized, $message, $percent);
+//            if ($percent >= 60) {
+////            dump($percent);
+//                return true;
+//            }
+//        }
+//
+//        $previousMessages[] = $normalized;
+////        dump($previousMessages);
+//        if (count($previousMessages) > 10) {
+//            array_shift($previousMessages);
+//        }
+//        $this->cache->save($this->cache->getItem($key)->set($previousMessages)->expiresAfter(2));
+//        //dump($this->cache);
+//        return false;
+//    }
 
+    private function isDuplicate(string $normalized): bool
+    {
+        $key = 'spam_checker_previous_messages';
         $previousMessages = $this->cache->get($key, function(ItemInterface $item) {
-            $item->expiresAfter(3600);
+            $item->expiresAfter(2);
             return [];
         });
 
@@ -76,8 +111,10 @@ class SpamChecker
         }
 
         $previousMessages[] = $normalized;
-        $this->cache->save($this->cache->getItem($key)->set($previousMessages));
-
+        if (count($previousMessages) > 10) {
+            array_shift($previousMessages);
+        }
+        $this->cache->save($this->cache->getItem($key)->set($previousMessages)->expiresAfter(2));
         return false;
     }
 
@@ -87,15 +124,14 @@ class SpamChecker
         $currentTime = microtime(true);
 
         $timestamps = $this->cache->get($key, function(ItemInterface $item) use ($currentTime) {
-            $item->expiresAfter(3600);
+            $item->expiresAfter(2);
             return [$currentTime];
         });
 
         $timestamps[] = $currentTime;
 
         if (count($timestamps) < 2) {
-            $this->cache->save($this->cache->getItem($key)->set($timestamps));
-
+            $this->cache->save($this->cache->getItem($key)->set($timestamps)->expiresAfter(2));
             return false;
         }
 
@@ -104,7 +140,7 @@ class SpamChecker
         if (count($timestamps) > 10) {
             array_shift($timestamps);
         }
-        $this->cache->save($this->cache->getItem($key)->set($timestamps));
+        $this->cache->save($this->cache->getItem($key)->set($timestamps)->expiresAfter(2));
 
         return $timeDifference < 2;
     }
@@ -121,5 +157,10 @@ class SpamChecker
         });
     }
 
+    public function clearCache(): void
+    {
+        $this->cache->deleteItem('spam_checker_previous_messages');
+        $this->cache->deleteItem('spam_checker_message_timestamps');
+    }
 
 }
