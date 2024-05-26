@@ -4,7 +4,6 @@
 # Put parameters here that don't need to change on each machine where the app is deployed
 # https://symfony.com/doc/current/best_practices.html#use-parameters-for-application-configuration
 parameters:
-#    cache_ttl: 60 # TTL в секундах
     stopwords_path: '%kernel.project_dir%/docs/stopwords.txt'
     blocklist_path: '%kernel.project_dir%/docs/blocklist.txt'
 
@@ -13,7 +12,7 @@ services:
     _defaults:
         autowire: true      # Automatically injects dependencies in your services.
         autoconfigure: true # Automatically registers your services as commands, event subscribers, etc.
-
+        public: false
     # makes classes in src/ available to be used as services
     # this creates a service per class whose id is the fully-qualified class name
     App\:
@@ -27,12 +26,18 @@ services:
     # please note that last definitions always *replace* previous ones
 
     # Define content from stopwords file
-    App\Service\MessageNormalizer:
-        arguments:
-            $stopWordsPath: '%stopwords_path%'
+#    App\Service\MessageNormalizer:
+#        arguments:
+#            $stopWordsPath: '%stopwords_path%'
 
     # Define content from blocklist file
     App\Service\SpamChecker:
         arguments:
+            $stopWordsPath: '%stopwords_path%'
             $blockListPath: '%blocklist_path%'
-#            $redis: '@snc_redis.default'
+            $cache: '@cache.app'
+
+    App\Controller\SpamController:
+        public: true
+        arguments:
+            $spamChecker: '@App\Service\SpamChecker'
