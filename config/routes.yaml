@@ -4,6 +4,17 @@ controllers:
         namespace: App\Controller
     type: attribute
 
-entity_list:
-    path: /api/entities
-    controller: App\Controller\EntityController::entityList
+#routes:
+#    resource: "routes/routes.yaml"
+#    type: "yaml"
+#
+
+#spam:
+#    path: /is_spam
+#    controller: App\Controller\SpamController::isSpam
+#    methods: ['POST']
+
+#invalidate_cache:
+#    path: /invalidate_cache
+#    controller: App\Controller\SpamController::invalidateCache
+#    methods: ['POST']

@@ -2,12 +2,29 @@
 // phpcs:ignoreFile
 //namespace tests;
 namespace App\Tests;
-
 use ApiTester;
 use Codeception\Example;
 
+/**
+ * Тесты API сервиса
+ */
 class ApiCest
 {
+    /**
+     * Проверка работоспособности сервиса
+     * @param \ApiTester $I
+     */
+//    public function tryApi(ApiTester $I)
+//    {
+//        $I->sendGet('/');
+//        $I->seeResponseCodeIs(200);
+//        $I->seeResponseIsJson();
+//    }
+
+    /**
+     * Негативный сценарий
+     * @param \ApiTester $I
+     */
     public function negative(ApiTester $I)
     {
         $this->invalidateCache($I);
@@ -21,9 +38,7 @@ class ApiCest
 
     /**
      * Позитивный сценарий
-     *
      * @dataProvider positiveDataProvider
-     *
      * @param \ApiTester           $I
      * @param \Codeception\Example $example
      */
@@ -51,7 +66,6 @@ class ApiCest
 
     /**
      * Сценарий проверки лимитера
-     *
      * @param \ApiTester $I
      */
     public function checkRate(ApiTester $I)
@@ -63,7 +77,7 @@ class ApiCest
 
         /*
          * Check rate 1
-         * */
+         */
         $I->sendPost('/is_spam', [
             'text'       => 'Буря мглою небо кроет, Вихри снежные крутя;',
             'check_rate' => 0,
@@ -78,8 +92,8 @@ class ApiCest
         sleep(3);
 
         /*
-         * Check rate 2 - FAIL
-         * */
+         * Check rate 2
+         */
         $I->sendPost('/is_spam', [
             'text'       => 'То, как зверь, она завоет, То заплачет, как дитя',
             'check_rate' => 1,
@@ -95,7 +109,7 @@ class ApiCest
 
         /*
          * Check rate 3
-         * */
+         */
         $I->sendPost('/is_spam', [
             'text'       => 'То по кровле обветшалой, Вдруг соломой зашумит',
             'check_rate' => 1,
@@ -139,7 +153,7 @@ class ApiCest
             ]);
 
         /*
-        * Вторая отправка сообщения
+        * Dulicates_1: Вторая отправка сообщения
         */
         $I->sendPost('/is_spam', [
             'text'       => 'Однажды, в веселую летнюю пору. Я из лесу вышел; было тепло',
@@ -154,7 +168,7 @@ class ApiCest
             ]);
 
         /*
-        * Dulicates_2:
+        * Dulicates_2: два сообщения подряд
         */
         $this->invalidateCache($I);
 
@@ -196,6 +210,11 @@ class ApiCest
             ]);
     }
 
+    /**
+     * Провайдер позитивных данных
+     *
+     * @return array
+     */
     protected function positiveDataProvider(): array
     {
         return [
