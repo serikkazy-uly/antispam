@@ -43,7 +43,8 @@ class SpamChecker
      */
     public function isSpam(string $text, bool $checkRate): array
     {
-        $normalizedText       = $this->normalize($text);
+//        $normalizedText       = $this->normalize($text);
+        $normalizedText = $this->normalize($text);
         $normalizedTextString = implode(' ', $normalizedText);
 
         if ($this->containsBlockList($normalizedText)) {
@@ -64,7 +65,7 @@ class SpamChecker
             ];
         }
 
-        if ($this->isDuplicate($normalizedTextString)) {
+        if ($this->isDuplicate($normalizedText)) {
             return [
                 'status'          => 'ok',
                 'spam'            => true,
@@ -134,8 +135,11 @@ class SpamChecker
     /*
      * Метод проверяет, является ли текст дубликатом одного из предыдущих сообщений.
      */
-    private function isDuplicate(string $normalizedText): bool
+    private function isDuplicate(array $normalizedTokens): bool
     {
+        if (count($normalizedTokens) < 3) {
+            return false;
+        }
         $key              = 'spam_checker_previous_messages';
         $previousMessages = $this->cache->get($key, function (ItemInterface $item) {
             $item->expiresAfter(3600);
@@ -143,14 +147,15 @@ class SpamChecker
             return [];
         });
 
-        foreach ($previousMessages as $message) {
-            similar_text($normalizedText, $message, $percent);
+        foreach ($previousMessages as $messageTokens) {
+            $commonTokens = array_intersect($normalizedTokens, $messageTokens);
+            $percent      = count($normalizedTokens) / count($commonTokens) * 100;
             if ($percent >= 60) {
                 return true;
             }
         }
 
-        $previousMessages[] = $normalizedText;
+        $previousMessages[] = $normalizedTokens;
         if (count($previousMessages) > 10) {
             array_shift($previousMessages);
         }
