@@ -70,14 +70,14 @@ class ApiCest
      */
     public function checkRate(ApiTester $I)
     {
-        $this->invalidateCache($I);
 
         $I->haveHttpHeader('Content-Type', 'application/x-www-form-urlencoded');
-        $I->comment('Отправляем два сообщения подряд, ожидаем 3 секунды между отправками');
+        $I->comment('Отправляем два сообщения "подряд и ожидаем 3 секунды" между отправками');
 
         /*
          * Check rate 1
          */
+        $this->invalidateCache($I);
         $I->sendPost('/is_spam', [
             'text'       => 'Буря мглою небо кроет, Вихри снежные крутя;',
             'check_rate' => 0,
@@ -89,6 +89,9 @@ class ApiCest
             'spam'   => false,
         ]);
 
+        /*
+         * Задержка по времени (пауза) на 3 сек
+         */
         sleep(3);
 
         /*
@@ -105,7 +108,7 @@ class ApiCest
             'spam'   => false,
         ]);
 
-        $I->comment('Отправляем третье сообщение без ожидания');
+        $I->comment('Отправляем третье сообщение "без ожидания"');
 
         /*
          * Check rate 3
@@ -134,10 +137,9 @@ class ApiCest
         /*
          * Dulicates_1: Первая отправка сообщения
          */
+        $this->invalidateCache($I);
         $I->haveHttpHeader('Content-Type', 'application/x-www-form-urlencoded');
         $I->comment('Отправляем два сообщения подряд, но они не похожи достаточно');
-
-        $this->invalidateCache($I);
 
         $I->sendPost('/is_spam', [
             'text'       => 'Однажды, в студеную зимнюю пору. Я из лесу вышел; был сильный мороз.',
@@ -153,7 +155,7 @@ class ApiCest
             ]);
 
         /*
-        * Dulicates_1: Вторая отправка сообщения
+        * Dulicates_1: вторая отправка сообщения
         */
         $I->sendPost('/is_spam', [
             'text'       => 'Однажды, в веселую летнюю пору. Я из лесу вышел; было тепло',
@@ -168,7 +170,7 @@ class ApiCest
             ]);
 
         /*
-        * Dulicates_2: два сообщения подряд
+        * Dulicates_2: два сообщения подряд!
         */
         $this->invalidateCache($I);
 
@@ -196,6 +198,7 @@ class ApiCest
             'spam'   => true,
             'reason' => 'duplicate',
         ]);
+
     }
 
     private function invalidateCache(ApiTester $I)

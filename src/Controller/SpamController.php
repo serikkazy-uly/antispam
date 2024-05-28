@@ -42,7 +42,7 @@ class SpamController extends AbstractController
 
         $result = $this->spamChecker->isSpam($text, $checkRate);
 
-        return $this->json($result);
+        return new JsonResponse($result);
     }
 
     /*

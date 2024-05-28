@@ -26,33 +26,63 @@ class SpamChecker
     private CacheInterface $cache;
 
     /*
-     * Конструктор класса SpamChecker.
-     * @param string $stopWordsPath Путь к файлу со стоп-словами.
-     * @param string $blockListPath Путь к файлу со списком заблокированных слов.
-     * @param CacheInterface $cache Интерфейс для работы с кэшем.
+     * @var int Пороговое значение процента совпадения для определения дубликатов.
      */
-    public function __construct(string $stopWordsPath, string $blockListPath, CacheInterface $cache)
-    {
-        $this->stopWords = file($stopWordsPath, FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES);
-        $this->blockList = file($blockListPath, FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES);
-        $this->cache     = $cache;
+    private int $similarityThreshold;
+
+    /*
+     * @var float Интервал времени для проверки частоты отправки сообщений.
+     */
+    private int $timeInterval;
+
+    /*
+     * @var int Максимальное количество сообщений за интервал времени.
+     */
+    private int $maxMessages;
+
+    /*
+     * Конструктор класса SpamChecker.
+     *
+     * @param string $stopWordsPath - Путь к файлу со стоп-словами.
+     * @param string $blockListPath - Путь к файлу со списком заблокированных слов.
+     * @param CacheInterface $cache - Интерфейс для работы с кэшем.
+     * @param int $similarityThreshold - Пороговое значение процента совпадения.
+     * @param float $timeInterval - Интервал времени для проверки частоты отправки сообщений.
+     * @param int $maxMessages - Максимальное количество сообщений за интервал времени.
+     */
+    public function __construct(
+        string $stopWordsPath,
+        string $blockListPath,
+        CacheInterface $cache,
+        int $similarityThreshold = 60,
+        int $timeInterval = 2,
+        int $maxMessages = 1
+    ) {
+        $this->stopWords           = file($stopWordsPath, FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES);
+        $this->blockList           = file($blockListPath, FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES);
+        $this->cache               = $cache;
+        $this->similarityThreshold = $similarityThreshold;
+        $this->timeInterval        = $timeInterval;
+        $this->maxMessages         = $maxMessages;
     }
 
     /*
-     * Метод проверяет текст на признаки спама
+     * Метод проверяет текст на признаки спама.
+     *
+     * @param string $text Текст для проверки.
+     * @param bool $checkRate Флаг проверки частоты отправки сообщений.
+     * @return array Результат проверки спама.
      */
     public function isSpam(string $text, bool $checkRate): array
     {
-//        $normalizedText       = $this->normalize($text);
         $normalizedText = $this->normalize($text);
-        $normalizedTextString = implode(' ', $normalizedText);
 
         if ($this->containsBlockList($normalizedText)) {
             return [
                 'status'          => 'ok',
                 'spam'            => true,
                 'reason'          => 'block_list',
-                'normalized_text' => $normalizedTextString,
+                'normalized_text' => implode(' ', $normalizedText),
             ];
         }
 
@@ -61,7 +91,7 @@ class SpamChecker
                 'status'          => 'ok',
                 'spam'            => true,
                 'reason'          => 'mixed_words',
-                'normalized_text' => $normalizedTextString,
+                'normalized_text' => implode(' ', $normalizedText),
             ];
         }
 
@@ -70,7 +100,7 @@ class SpamChecker
                 'status'          => 'ok',
                 'spam'            => true,
                 'reason'          => 'duplicate',
-                'normalized_text' => $normalizedTextString,
+                'normalized_text' => implode(' ', $normalizedText),
             ];
         }
 
@@ -86,31 +116,39 @@ class SpamChecker
             'status'          => 'ok',
             'spam'            => false,
             'reason'          => '',
-            'normalized_text' => $normalizedTextString,
+            'normalized_text' => implode(' ', $normalizedText),
         ];
+
     }
 
     /*
      * Метод нормализует текст, удаляя стоп-слова и приводя к нижнему регистру.
+     *
+     * @param string $text Текст для нормализации.
+     * @return array Нормализованные токены.
      */
     private function normalize(string $text): array
     {
-        $tokens = preg_split('/[\,\!\?\[\]\(\)\<\>\:\;\-\n\'\r\s\"\/\*\|]+/', $text);
+        preg_match_all('/[\w\.\-]+@[\w\.\-]+\.[\w]+/', $text, $matches);
+        $emails = $matches[0];
+        $text = preg_replace('/[\w\.\-]+@[\w\.\-]+\.[\w]+/', '', $text);
+        $tokens = preg_split('/[\.\,\!\?\[\]\(\)\<\>\:\;\-\n\'\r\s\"\/\*\|]+/', $text);
         $tokens = array_map('mb_strtolower', $tokens);
         $tokens = array_diff($tokens, $this->stopWords);
         $tokens = array_filter($tokens, fn($token) => !ctype_digit($token) && !empty($token));
+        $tokens = array_merge($tokens, $emails);
         sort($tokens);
-
         return array_values($tokens);
     }
 
     /*
-     * Метод проверяет, содержит ли текст заблокированные слова или адреса электронной почты
+     * Метод проверяет, содержит ли текст заблокированные слова или
+     * адреса электронной почты.
      */
     private function containsBlockList(array $tokens): bool
     {
         foreach ($tokens as $token) {
-            if (in_array($token, $this->blockList) || filter_var($token, FILTER_VALIDATE_EMAIL)) {
+            if (in_array(mb_strtolower($token), $this->blockList) || filter_var($token, FILTER_VALIDATE_EMAIL)) {
                 return true;
             }
         }
@@ -119,7 +157,10 @@ class SpamChecker
     }
 
     /*
-     * Метод проверяет, содержит ли текст слова, состоящие из смешанных алфавитов (кириллица и латиница)
+     * Метод проверяет, содержит ли текст слова, состоящие из смешанных алфавитов (кириллица и латиница).
+     *
+     * @param array $tokens Нормализованные токены.
+     * @return bool True, если содержит смешанные слова, иначе False.
      */
     private function containsMixedWords(array $tokens): bool
     {
@@ -134,65 +175,75 @@ class SpamChecker
 
     /*
      * Метод проверяет, является ли текст дубликатом одного из предыдущих сообщений.
+     *
+     * @param array $normalizedTokens Нормализованные токены.
+     * @return bool True, если текст является дубликатом, иначе False.
      */
     private function isDuplicate(array $normalizedTokens): bool
     {
         if (count($normalizedTokens) < 3) {
             return false;
         }
-        $key              = 'spam_checker_previous_messages';
-        $previousMessages = $this->cache->get($key, function (ItemInterface $item) {
-            $item->expiresAfter(3600);
 
+        $key              = 'spam_checker_previous_messages';
+        $previousMessages = $this->cache->get($key, function () {
             return [];
         });
-
         foreach ($previousMessages as $messageTokens) {
+            $messageTokens = json_decode($messageTokens, true);
+
             $commonTokens = array_intersect($normalizedTokens, $messageTokens);
-            $percent      = count($normalizedTokens) / count($commonTokens) * 100;
-            if ($percent >= 60) {
+            $percent      = (count($commonTokens) / count($normalizedTokens)) * 100;
+
+            if ($percent >= $this->similarityThreshold) {
                 return true;
             }
         }
 
-        $previousMessages[] = $normalizedTokens;
+        $previousMessages[] = json_encode($normalizedTokens);
+
         if (count($previousMessages) > 10) {
             array_shift($previousMessages);
         }
-        $this->cache->save($this->cache->getItem($key)->set($previousMessages)->expiresAfter(3600));
 
+        $this->cache->save($this->cache->getItem($key)->set($previousMessages)->expiresAfter(60));
         return false;
     }
 
     /*
-     * Метод проверяет скорость (частота) отправки сообщений.
+     * Метод проверяет скорость (частоту) отправки сообщений.
+     * @return bool True, если частота превышена, иначе False.
      */
     private function checkRate(): bool
     {
-        $key         = 'spam_checker_message_timestamps';
+        $key = 'spam_checker_message_timestamps';
         $currentTime = microtime(true);
 
         $timestamps = $this->cache->get($key, function (ItemInterface $item) {
-            $item->expiresAfter(2);
-
+            $item->expiresAfter($this->timeInterval);
             return [];
         });
 
         $timestamps[] = $currentTime;
 
-        $this->cache->save($this->cache->getItem($key)->set($timestamps)->expiresAfter(2));
-        if (count($timestamps) < 2) {
-            return false;
+        if (count($timestamps) > 1) {
+            $this->cache->save($this->cache->getItem($key)->set($timestamps)->expiresAfter($this->timeInterval));
+            if (count($timestamps) < $this->maxMessages) {
+                return false;
+            }
+
+            $timeDifference = $timestamps[count($timestamps) - 1] - $timestamps[0];
+
+            if (count($timestamps) > $this->maxMessages) {
+                array_shift($timestamps);
+            }
+            $this->cache->save($this->cache->getItem($key)->set($timestamps)->expiresAfter($this->timeInterval));
+
+            return $timeDifference < $this->timeInterval;
         }
 
-        $timeDifference = $timestamps[count($timestamps) - 1] - $timestamps[count($timestamps) - 2];
-
-        if (count($timestamps) > 10) {
-            array_shift($timestamps);
-        }
-        $this->cache->save($this->cache->getItem($key)->set($timestamps)->expiresAfter(2));
-
-        return $timeDifference < 2;
+        $this->cache->save($this->cache->getItem($key)->set($timestamps)->expiresAfter($this->timeInterval));
+        return false;
     }
 
     /*
@@ -203,4 +254,5 @@ class SpamChecker
         $this->cache->deleteItem('spam_checker_previous_messages');
         $this->cache->deleteItem('spam_checker_message_timestamps');
     }
+
 }
